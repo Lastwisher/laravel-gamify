@@ -2,6 +2,8 @@
 
 namespace QCod\Gamify;
 
+use App\Models\GamifyLevel;
+use App\Models\GamifyPoint;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Eloquent\Model;
 use QCod\Gamify\Exceptions\PointsNotDefined;
@@ -33,6 +35,8 @@ abstract class PointType
      * Payee who will be recieving points
      *
      * @return Model
+     * @throws \QCod\Gamify\Exceptions\InvalidPayeeModel
+     * @throws \QCod\Gamify\Exceptions\PointSubjectNotSet
      */
     public function payee()
     {
@@ -47,6 +51,7 @@ abstract class PointType
      * Subject model for point
      *
      * @return Model
+     * @throws \QCod\Gamify\Exceptions\PointSubjectNotSet
      */
     public function getSubject()
     {
@@ -73,14 +78,27 @@ abstract class PointType
      * Get points
      *
      * @return int
-     * @throws PointsNotDefined
+     * @throws \QCod\Gamify\Exceptions\InvalidPayeeModel
+     * @throws \QCod\Gamify\Exceptions\PointSubjectNotSet
+     * @throws \QCod\Gamify\Exceptions\PointsNotDefined
      */
     public function getPoints()
     {
+        $points = (new GamifyPoint)->cacheable();
+        $point  = $points->where('event', $this->getName())->first();
+        if ($point) {
+            $this->points = $point->point;
+            $multiplier   = $point->multiplier;
+            if ($multiplier && isset($this->subject->{$multiplier})) {
+                $this->points *= (int) round($this->subject->{$multiplier});
+            }
+        }
+
         if (!isset($this->points)) {
             throw new PointsNotDefined();
         }
-        $rates = config('gamify.user_level_xp_rate', [0 => 1]);
+
+        $rates = (new GamifyLevel)->cacheable()->pluck('level_xp_rate', 'level')->toArray();
 
         if (is_integer($this->payee()->level) && isset($rates[$this->payee()->level])) {
             return $this->points * $rates[$this->payee()->level];
@@ -126,7 +144,9 @@ abstract class PointType
      *
      * @param  array  $meta
      * @return mixed
-     * @throws InvalidPayeeModel
+     * @throws \QCod\Gamify\Exceptions\InvalidPayeeModel
+     * @throws \QCod\Gamify\Exceptions\PointSubjectNotSet
+     * @throws \QCod\Gamify\Exceptions\PointsNotDefined
      */
     public function storeReputation($meta = [])
     {
@@ -144,7 +164,8 @@ abstract class PointType
      * Get reputation query for this point
      *
      * @return Builder
-     * @throws InvalidPayeeModel
+     * @throws \QCod\Gamify\Exceptions\InvalidPayeeModel
+     * @throws \QCod\Gamify\Exceptions\PointSubjectNotSet
      */
     public function reputationQuery()
     {
@@ -160,7 +181,8 @@ abstract class PointType
      * Return reputations payee relation
      *
      * @return HasMany
-     * @throws InvalidPayeeModel
+     * @throws \QCod\Gamify\Exceptions\InvalidPayeeModel
+     * @throws \QCod\Gamify\Exceptions\PointSubjectNotSet
      */
     protected function payeeReputations()
     {
