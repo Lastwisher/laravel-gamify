@@ -80,7 +80,8 @@ abstract class PointType
         if (!isset($this->points)) {
             throw new PointsNotDefined();
         }
-        $rates = config('gamify.user_level_xp_rate', [0 => 1]);
+
+        $rates = (new \App\Models\GamifyLevel)->cacheable()->pluck('level_xp_rate','level')->toArray();
 
         if (is_integer($this->payee()->level) && isset($rates[$this->payee()->level])) {
             return $this->points * $rates[$this->payee()->level];
